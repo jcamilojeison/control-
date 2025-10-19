@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doble Joystick para Carro</title>
+  <style>
+    body {
+      background: #121212;
+      color: white;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    .joysticks {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 40px;
+    }
+
+    .joystick-container {
+      width: 150px;
+      height: 150px;
+      background-color: #333;
+      border-radius: 50%;
+      position: relative;
+      touch-action: none;
+    }
+
+    .stick {
+      width: 60px;
+      height: 60px;
+      background-color: #0f0;
+      border-radius: 50%;
+      position: absolute;
+      top: 45px;
+      left: 45px;
+      transition: 0.05s;
+    }
+
+    #status {
+      margin-top: 30px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🕹️ Doble Joystick</h1>
+
+  <div class="joysticks">
+    <div class="joystick-container" id="joystick-vertical">
+      <div class="stick" id="stick-vertical"></div>
+    </div>
+    <div class="joystick-container" id="joystick-horizontal">
+      <div class="stick" id="stick-horizontal"></div>
+    </div>
+  </div>
+
+  <div id="status">Listo</div>
+
+  <script>
+    const IP = "192.168.4.1"; // Cambia esto si tu ESP32 tiene otra IP
+
+    // Joystick vertical (adelante / atrás)
+    joystick("joystick-vertical", "stick-vertical", "vertical");
+
+    // Joystick horizontal (izquierda / derecha)
+    joystick("joystick-horizontal", "stick-horizontal", "horizontal");
+
+    function joystick(containerId, stickId, type) {
+      const container = document.getElementById(containerId);
+      const stick = document.getElementById(stickId);
+      const center = { x: 75, y: 75 };
+      let dragging = false;
+      let lastSent = 0;
+
+      function send(dir) {
+        const now = Date.now();
+        if (now - lastSent < 100) return;
+        lastSent = now;
+        document.getElementById("status").textContent = `${type}: ${dir}`;
+        fetch(`http://${IP}/go?${type}=${dir}`)
+          .catch(err => console.error(err));
+      }
+
+      function resetStick() {
+        stick.style.left = "45px";
+        stick.style.top = "45px";
+        send("stop");
+      }
+
+      function updatePosition(e) {
+        if (!dragging) return;
+        let touch = e.touches ? e.touches[0] : e;
+        let rect = container.getBoundingClientRect();
+        let x = touch.clientX - rect.left;
+        let y = touch.clientY - rect.top;
+
+        let dx = x - center.x;
+        let dy = y - center.y;
+        let dist = Math.min(Math.sqrt(dx * dx + dy * dy), 60);
+        let angle = Math.atan2(dy, dx);
+
+        let offsetX = dist * Math.cos(angle);
+        let offsetY = dist * Math.sin(angle);
+
+        let stickX = center.x + offsetX - 30;
+        let stickY = center.y + offsetY - 30;
+
+        stick.style.left = `${stickX}px`;
+        stick.style.top = `${stickY}px`;
+
+        // Determinar dirección
+        if (type === "vertical") {
+          if (offsetY < -20) send("forward");
+          else if (offsetY > 20) send("back");
+          else send("stop");
+        } else if (type === "horizontal") {
+          if (offsetX < -20) send("left");
+          else if (offsetX > 20) send("right");
+          else send("stop");
+        }
+      }
+
+      container.addEventListener("touchstart", e => { dragging = true; });
+      container.addEventListener("touchmove", updatePosition);
+      container.addEventListener("touchend", () => { dragging = false; resetStick(); });
+
+      container.addEventListener("mousedown", e => { dragging = true; });
+      container.addEventListener("mousemove", updatePosition);
+      container.addEventListener("mouseup", () => { dragging = false; resetStick(); });
+      container.addEventListener("mouseleave", () => { dragging = false; resetStick(); });
+    }
+  </script>
+
+</body>
+</html>
